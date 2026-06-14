@@ -1,0 +1,27 @@
+logical backup
+--------------
+
+## export the table emp
+/usr/pgsql-18/bin/pg_dump  -U kfc_user -d kfc_db -t emp > emp.sql
+
+## import the table
+psql -U  kfc_user -d kfc_db < emp.sql
+
+Logical backups
+----------------
+exporting your data
+--------------------
+/usr/pgsql-18/bin/pg_dump -U kfc_user -d kfc_db -t emp -Fc -f emp.bkp  #custom format, cannot read, have custom compression (-Z)
+/usr/pgsql-18/bin/pg_dump -U kfc_user -d kfc_db -t emp -Fp -f emp.plain  #plain text format, can read
+/usr/pgsql-18/bin/pg_dump -U kfc_user -d kfc_db -t emp -Ft -f emp.tar	#o/s tar
+/usr/pgsql-18/bin/pg_dump -U kfc_user -d kfc_db -t emp -Fd -f emp		#directory format, parallelism(-j)
+
+import
+------
+/usr/pgsql-18/bin/pg_restore -U kfc_user -d kfc_db emp.bkp
+
+kfc_uatdb=# ALTER SCHEMA kfc_user RENAME TO  kfc_uat;
+ALTER SCHEMA
+
+alter table kfc_uat.emp owner to kfc_uat;
+
