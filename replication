@@ -1,0 +1,141 @@
+-- provision 3 machines
+-- install postgresql on all three machines
+-- initialize first instance in machine 1
+-- enable archivelogging
+-- enable passwordless connection
+
+192.168.108.131
+192.168.108.132
+192.168.108.133
+
+useradd postgres
+passwd postgres
+
+dnf install epel-release
+dnf config-manager --set-enabled crb
+
+dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+dnf install -y postgresql18-server postgresql18-contrib postgresql18-devel
+
+
+mkdir -p /u01
+chown -R postgres:postgres /u01
+	
+### lab01
+
+su - postgres
+/usr/pgsql-18/bin/initdb -D /u01/pgsql/18
+/usr/pgsql-18/bin/pg_ctl -D /u01/pgsql/18  start
+ 
+-- post installation steps
+
+-- enable passwordless connectiviy
+
+
+
+ssh-keygen -t rsa
+ssh postgres@192.168.108.131 mkdir -p .ssh
+cat .ssh/id_rsa.pub | ssh postgres@192.168.108.131 'cat >> .ssh/authorized_keys'
+ssh postgres@192.168.108.131 "chmod 700 .ssh; chmod 640 .ssh/authorized_keys"
+ssh postgres@192.168.108.131
+
+-- enable replication connection
+host    replication     all    0.0.0.0/0          trust   ##pg_hba.conf
+
+
+
+task 1: take the backup from remote machine
+task 2: take the backup from remote machine and apply archivelogs generated after the backup is taken
+task 3: take the backup from remote machine and apply archivelogs generated after the backup is taken until my fav location only
+task 4: take the backup from remote machine and apply archivelogs generated after the backup is taken and wait for next archive to come
+task 5: take the backup from remote machine and apply archivelogs generated after the backup is taken and don't wait for next archive to come instead get info from wal itself (streaming replication)
+task 6: take the backup from remote machine and apply archivelogs generated after the backup is taken and don't wait for next archive to come instead get info from wal itself and apply change in standby first( synchronous streaming replication)
+
+
+-- little more on PITR (10-15min)
+-- hot standby conflicts (15-20min)
+-- cascading replication
+-- switchover
+-- failover (manually)  ---- finish on-prem
+-- lab03 (load balancer : pgpool)
+-- lab01 (pgbouncer)
+-- automatic switchover/failover (patroni)
+
+pg_upgrade
+
+
+task 1: take the backup from remote machine
+---
+/usr/pgsql-18/bin/pg_basebackup -D /u01/pgsql/18 --checkpoint=fast -P -h 192.168.108.131
+
+task 2: take the backup from remote machine and apply archivelogs generated after the backup is taken
+---
+
+/usr/pgsql-18/bin/pg_basebackup -D /u01/pgsql/18 --checkpoint=fast -P -h 192.168.108.131
+touch recovery.signal
+restore_command = 'scp 192.168.108.131:/u01/archivelogs/%f %p' 
+
+task 3: take the backup from remote machine and apply archivelogs generated after the backup is taken until my fav location only
+---
+/usr/pgsql-18/bin/pg_basebackup -D /u01/pgsql/18 --checkpoint=fast -P -h 192.168.108.131
+touch recovery.signal
+restore_command = 'scp 192.168.108.131:/u01/archivelogs/%f %p'
+recovery_target_lsn = '0/14DC6AB8'
+
+task 4: take the backup from remote machine and apply archivelogs generated after the backup is taken and wait for next archive to come
+---
+touch standby.signal
+/usr/pgsql-18/bin/pg_basebackup -D /u01/pgsql/18 --checkpoint=fast -P -h 192.168.108.131
+restore_command = 'scp 192.168.108.131:/u01/archivelogs/%f %p'
+
+task 5: take the backup from remote machine and apply archivelogs generated after the backup is taken and don't wait for next archive to come instead get info from wal itself (streaming replication)
+--
+
+touch standby.signal
+/usr/pgsql-18/bin/pg_basebackup -D /u01/pgsql/18 --checkpoint=fast -P -h 192.168.108.131
+restore_command = 'scp 192.168.108.131:/u01/archivelogs/%f %p'
+primary_conninfo = 'host=192.168.108.131 user=postgres password=postgres' 
+
+task 6: take the backup from remote machine and apply archivelogs generated after the backup is taken and don't wait for next archive to come instead get info from wal itself and apply change in standby first( synchronous streaming replication)
+--
+synchronous_standby_names='*' ##primary postgresql.conf
+
+touch standby.signal
+/usr/pgsql-18/bin/pg_basebackup -D /u01/pgsql/18 --checkpoint=fast -P -h 192.168.108.131
+restore_command = 'scp 192.168.108.131:/u01/archivelogs/%f %p'
+primary_conninfo = 'host=192.168.108.131 user=postgres password=postgres application_name=random' 
+
+
+what -R in pg_basebackup does?
+------------------------------
+1. it will create standby.signal
+2. it will write primary_conninfo
+
+-- you have to manually write restore_command
+-- if sync standby manually edit primary_conninfo
+
+
+
+
+take backup and simply start
+take backup and add recovery.signal+restore_command = apply archive logs as well
+take backup and add recovery.signal+restore_command+recovery_target = PITR
+take backup and add standby.signal+restore_command = physical standby (archive based)
+take backup and add standby.signal+restore_command+primary_conninfo = physical standby (realtime apply)
+take backup and add standby.signal+restore_command+primary_conninfo+application_name = synch. physical standby (realtime apply)
+
+
+
+
+
+#recovery_target_name = ''      # the named restore point to which recovery will proceed
+                                # (change requires restart)
+#recovery_target_time = ''      # the time stamp up to which recovery will proceed
+                                # (change requires restart)
+#recovery_target_xid = ''       # the transaction ID up to which recovery will proceed
+                                # (change requires restart)
+#recovery_target_lsn = ''       # the WAL LSN up to which recovery will proceed
+                                # (change requires restart)
+
+
+
